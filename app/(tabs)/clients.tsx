@@ -39,7 +39,7 @@ export default function ClientsScreen() {
   const [saleForm, setSaleForm] = useState({ amount: '', commission: '' });
 
   // Form state
-  const [form, setForm] = useState({ name: '', phone: '', referred_by: '', stage_id: 'nuevo_cliente' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', referred_by: '', stage_id: 'nuevo_cliente' });
 
   const filtered = state.clients.filter(c => {
     const matchSearch = search === '' ||
@@ -58,14 +58,14 @@ export default function ClientsScreen() {
       name: form.name.trim(),
       initials: form.name.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
       phone: form.phone || null,
-      email: null,
+      email: form.email || null,
       referred_by: form.referred_by || null,
       stage_id: form.stage_id,
       total_sales: 0, display_sales: '0',
       total_profit: 0, display_profit: '0',
       notes: null,
     });
-    setForm({ name: '', phone: '', referred_by: '', stage_id: 'nuevo_cliente' });
+    setForm({ name: '', phone: '', email: '', referred_by: '', stage_id: 'nuevo_cliente' });
     setShowAddModal(false);
   }
 
@@ -139,6 +139,7 @@ export default function ClientsScreen() {
           {[
             { key: 'name', label: 'Nombre completo *', placeholder: 'Ej: María López', keyboard: 'default' },
             { key: 'phone', label: 'Teléfono', placeholder: 'Ej: 3001234567', keyboard: 'phone-pad' },
+            { key: 'email', label: 'Correo electrónico', placeholder: 'Ej: maria@ejemplo.com', keyboard: 'email-address' },
             { key: 'referred_by', label: 'Referido por', placeholder: 'Ej: Esteban', keyboard: 'default' },
           ].map(f => (
             <View key={f.key} style={styles.formGroup}>

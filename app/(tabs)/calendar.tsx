@@ -27,7 +27,7 @@ function fmt(y: number, m: number, d: number) {
 }
 
 export default function CalendarScreen() {
-  const { state, addEvent, toggleEventComplete } = useApp();
+  const { state, addEvent, toggleEventComplete, deleteEvent } = useApp();
   const cal = APP_SCHEMA.modules.calendar;
 
   const now = new Date();
@@ -282,6 +282,18 @@ export default function CalendarScreen() {
                         <Ionicons name="logo-google" size={14} color={Theme.colors.secondary} />
                       </TouchableOpacity>
                     )}
+                    <TouchableOpacity 
+                      onPress={() => {
+                        Alert.alert('Eliminar Evento', '¿Estás seguro?', [
+                          { text: 'No' },
+                          { text: 'Eliminar', style: 'destructive', onPress: () => deleteEvent(ev.id) }
+                        ]);
+                      }}
+                      activeOpacity={0.7}
+                      style={[styles.smallBtn, { borderColor: Theme.colors.danger + '44' }]}
+                    >
+                      <Ionicons name="trash-outline" size={14} color={Theme.colors.danger} />
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => toggleEventComplete(ev.id)} activeOpacity={0.7}
                       style={[styles.completeBtn, ev.completed && { backgroundColor: Theme.colors.primary + '33', borderColor: Theme.colors.primary }]}>
                       <Ionicons name={ev.completed ? 'checkmark' : 'ellipse-outline'} size={16} color={ev.completed ? Theme.colors.primary : Theme.colors.text_muted} />

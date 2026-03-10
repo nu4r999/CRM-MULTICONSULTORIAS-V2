@@ -39,6 +39,7 @@ interface AppContextType {
   completeTask: (taskId: string) => void;
   addEvent: (event: Omit<CalEvent, 'id'>) => void;
   toggleEventComplete: (eventId: string) => void;
+  deleteEvent: (eventId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -122,8 +123,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const deleteEvent = useCallback((eventId: string) => {
+    setState(prev => ({
+      ...prev,
+      events: prev.events.filter(e => e.id !== eventId),
+    }));
+  }, []);
+
   return (
-    <AppContext.Provider value={{ state, addClient, updateClientStage, updateClientNotes, addSale, deleteClient, completeTask, addEvent, toggleEventComplete }}>
+    <AppContext.Provider value={{
+      state, addClient, updateClientStage, updateClientNotes,
+      addSale, deleteClient, completeTask, addEvent,
+      toggleEventComplete, deleteEvent
+    }}>
       {children}
     </AppContext.Provider>
   );
@@ -152,7 +164,8 @@ export function useApp(): AppContextType {
       deleteClient: () => {},
       completeTask: () => {},
       addEvent: () => {},
-      toggleEventComplete: () => {},
+      toggleEventComplete: (eventId: string) => {},
+      deleteEvent: (eventId: string) => {},
     };
   }
   return ctx;
