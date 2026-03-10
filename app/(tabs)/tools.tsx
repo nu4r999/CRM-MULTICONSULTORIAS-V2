@@ -9,6 +9,12 @@ import { GlowCard } from '../../src/components/GlowCard';
 import { Typography } from '../../src/components/Typography';
 import { NeonButton } from '../../src/components/NeonButton';
 import { Ionicons } from '@expo/vector-icons';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+// @ts-ignore
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../src/context/AuthContext';
+import { useApp } from '../../src/context/AppContext';
 
 type ToolId = 'commission_calculator' | 'goal_projection' | 'report_generator';
 
@@ -173,21 +179,143 @@ function GoalProjection() {
 
 // ── REPORT GENERATOR ─────────────────────────
 function ReportGenerator() {
+  const { state } = useApp();
   const [selectedReport, setSelectedReport] = useState('client_list');
+  const [selectedFormat, setSelectedFormat] = useState<'PDF' | 'Excel' | 'CSV'>('PDF');
   const [generating, setGenerating] = useState(false);
+  const [previewData, setPreviewData] = useState<string | null>(null);
 
-  const reports = APP_SCHEMA.modules.tools.available_tools.filter(t => t.id === 'report_generator')[0];
   const reportTypes = [
-    { id: 'client_list', label: 'Lista de Clientes', icon: 'people' as const, formats: ['PDF', 'Excel', 'CSV'], description: 'Todos los clientes con estado actual' },
-    { id: 'sales_report', label: 'Reporte de Ventas', icon: 'cart' as const, formats: ['PDF', 'Excel'], description: 'Detalle de ventas por período' },
-    { id: 'commission_report', label: 'Reporte de Comisiones', icon: 'cash' as const, formats: ['PDF', 'Excel'], description: 'Comisiones generadas y pendientes' },
+    { id: 'client_list', label: 'Lista de Clientes', icon: 'people' as const, description: 'Todos los clientes con estado actual' },
+    { id: 'sales_report', label: 'Reporte de Ventas', icon: 'cart' as const, description: 'Detalle de ventas y comisiones' },
+    { id: 'commission_report', label: 'Reporte de Comisiones', icon: 'cash' as const, description: 'Comisiones generadas por asesor' },
   ];
+
+  function buildCSV(): string {
+    const now = new Date().toLocaleDateString('es-CO');
+    if (selectedReport === 'client_list') {
+      const header = 'Nombre,Teléfono,Email,Etapa,Total Ventas COP,Total Comisión COP,Fecha Creación\n';
+      const rows = state.clients.map((c: any) =>
+        `"${c.name}","${c.phone ?? ''}","${c.email ?? ''}","${c.stage_id}","${c.total_sales}","${c.total_profit}","${c.created_at.slice(0, 10)}"`
+      ).join('\n');
+      return `REPORTE: Lista de Clientes\nFecha: ${now}\n\n${header}${rows}`;
+    }
+    if (selectedReport === 'sales_report') {
+      const header = 'Cliente,Etapa,Ventas COP,Fecha\n';
+      const rows = state.clients
+        .filter((c: any) => c.total_sales > 0)
+        .sort((a: any, b: any) => b.total_sales - a.total_sales)
+        .map((c: any) => `"${c.name}","${c.stage_id}","${c.total_sales}","${c.updated_at.slice(0, 10)}"`)
+        .join('\n');
+      const total = state.clients.reduce((s: any, c: any) => s + c.total_sales, 0);
+      return `REPORTE: Ventas\nFecha: ${now}\nTotal General: $${total.toLocaleString('es-CO')}\n\n${header}${rows}`;
+    }
+    // commission_report
+    const header = 'Cliente,Comisión COP,% Margen,Estado\n';
+    const rows = state.clients
+      .filter((c: any) => c.total_profit > 0)
+      .sort((a: any, b: any) => b.total_profit - a.total_profit)
+      .map((c: any) => {
+        const pct = c.total_sales > 0 ? ((c.total_profit / c.total_sales) * 100).toFixed(1) : '0';
+        return `"${c.name}","${c.total_profit}","${pct}%","${c.stage_id}"`;
+      }).join('\n');
+    const totalComm = state.clients.reduce((s: any, c: any) => s + c.total_profit, 0);
+    return `REPORTE: Comisiones\nFecha: ${now}\nTotal Comisiones: $${totalComm.toLocaleString('es-CO')}\n\n${header}${rows}`;
+  }
+
+  function getRawData() {
+    if (selectedReport === 'client_list') {
+      return state.clients.map((c: any) => ({
+        Nombre: c.name,
+        Telefono: c.phone ?? '',
+        Email: c.email ?? '',
+        Etapa: c.stage_id,
+        Ventas: c.total_sales,
+        Comision: c.total_profit,
+        Fecha: c.created_at.slice(0, 10)
+      }));
+    }
+    if (selectedReport === 'sales_report') {
+      return state.clients
+        .filter((c: any) => c.total_sales > 0)
+        .map((c: any) => ({
+          Cliente: c.name,
+          Etapa: c.stage_id,
+          Ventas: c.total_sales,
+          Fecha: c.updated_at.slice(0, 10)
+        }));
+    }
+    return state.clients
+      .filter((c: any) => c.total_profit > 0)
+      .map((c: any) => ({
+        Cliente: c.name,
+        Comision: c.total_profit,
+        Ventas: c.total_sales,
+        Estado: c.stage_id
+      }));
+  }
 
   function handleGenerate() {
     setGenerating(true);
+    const reportLabel = reportTypes.find(r => r.id === selectedReport)?.label ?? 'Reporte';
+    const timestamp = new Date().toISOString().slice(0, 10);
+
     setTimeout(() => {
+      try {
+        if (typeof window !== 'undefined' && window.document) {
+          // Web Flow
+          if (selectedFormat === 'CSV') {
+            const csvData = buildCSV();
+            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = window.document.createElement('a');
+            a.href = url; a.download = `${reportLabel}_${timestamp}.csv`; a.click();
+            URL.revokeObjectURL(url);
+          } else if (selectedFormat === 'Excel') {
+            const data = getRawData();
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+            XLSX.writeFile(wb, `${reportLabel}_${timestamp}.xlsx`);
+          } else if (selectedFormat === 'PDF') {
+            const doc = new jsPDF() as any;
+            const data = getRawData();
+            if (data.length > 0) {
+              const headers = [Object.keys(data[0]).map(k => k.toUpperCase())];
+              const rows = data.map((item: any) => Object.values(item));
+
+              doc.setFontSize(18);
+              doc.text(`MULTICONSULTORIAS CRM`, 14, 15);
+              doc.setFontSize(12);
+              doc.text(`REPORTE: ${reportLabel.toUpperCase()}`, 14, 25);
+              doc.setFontSize(10);
+              doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 32);
+
+              (doc as any).autoTable({
+                startY: 40,
+                head: headers,
+                body: rows,
+                theme: 'striped',
+                headStyles: { fillColor: [0, 255, 136], textColor: [0, 0, 0] },
+                styles: { fontSize: 8 },
+              });
+              doc.save(`${reportLabel}_${timestamp}.pdf`);
+            } else {
+              Alert.alert('⚠️ Sin datos', 'No hay información suficiente para generar este reporte.');
+            }
+          }
+          Alert.alert('✅ Éxito', `Reporte ${selectedFormat} descargado.`);
+        } else {
+          // Mobile fallback
+          const txt = buildCSV();
+          setPreviewData(txt);
+          Alert.alert('✅ Listo', 'Reporte generado. Ver vista previa debajo.');
+        }
+      } catch (err) {
+        console.error(err);
+        Alert.alert('❌ Error', 'No se pudo generar el reporte.');
+      }
       setGenerating(false);
-      Alert.alert('✅ Reporte generado', 'Tu reporte está listo para descargar.', [{ text: 'OK' }]);
     }, 1500);
   }
 
@@ -215,13 +343,6 @@ function ReportGenerator() {
                   {r.label}
                 </Typography>
                 <Typography variant="small" color="muted">{r.description}</Typography>
-                <View style={styles.formatsRow}>
-                  {r.formats.map(f => (
-                    <View key={f} style={styles.formatBadge}>
-                      <Typography variant="small" style={{ color: Theme.colors.accent, fontSize: 9, fontWeight: '700' }}>{f}</Typography>
-                    </View>
-                  ))}
-                </View>
               </View>
               {selectedReport === r.id && (
                 <Ionicons name="checkmark-circle" size={20} color={Theme.colors.accent} />
@@ -230,8 +351,32 @@ function ReportGenerator() {
           </GlowCard>
         </TouchableOpacity>
       ))}
+
+      {/* Format Selector */}
+      <View style={{ flexDirection: 'row', gap: 10, marginVertical: 15 }}>
+        {['PDF', 'Excel', 'CSV'].map((format) => (
+          <TouchableOpacity
+            key={format}
+            onPress={() => setSelectedFormat(format as any)}
+            style={{
+              flex: 1,
+              padding: 10,
+              borderRadius: 8,
+              backgroundColor: selectedFormat === format ? Theme.colors.accent + '22' : Theme.colors.bg_card,
+              borderWidth: 1,
+              borderColor: selectedFormat === format ? Theme.colors.accent : Theme.colors.border,
+              alignItems: 'center'
+            }}
+          >
+            <Typography variant="label" style={{ color: selectedFormat === format ? Theme.colors.accent : Theme.colors.text_muted }}>
+              {format}
+            </Typography>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <NeonButton
-        label={generating ? 'Generando...' : '⬇ Generar Reporte'}
+        label={generating ? 'Generando...' : `⬇ Descargar en ${selectedFormat}`}
         onPress={handleGenerate}
         color={Theme.colors.accent}
         loading={generating}
@@ -239,6 +384,22 @@ function ReportGenerator() {
         size="lg"
         style={{ marginTop: 8 }}
       />
+
+      {previewData && (
+        <GlowCard glowColor={Theme.colors.accent} style={{ marginTop: 20 }} padding={15}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Typography variant="label">VISTA PREVIA DE DATOS</Typography>
+            <TouchableOpacity onPress={() => setPreviewData(null)}>
+              <Ionicons name="close" size={20} color={Theme.colors.danger} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ maxHeight: 200 }}>
+            <Typography variant="small" style={{ fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+              {previewData}
+            </Typography>
+          </ScrollView>
+        </GlowCard>
+      )}
     </View>
   );
 }
