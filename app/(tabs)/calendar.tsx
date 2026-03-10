@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, View, ScrollView, TouchableOpacity,
-  Modal, Pressable, TextInput, Switch,
+  Modal, Pressable, Switch, TextInput, Alert, Platform,
 } from 'react-native';
 import { Theme } from '../../src/constants/Theme';
 import { APP_SCHEMA } from '../../src/data/schema';
@@ -267,10 +267,26 @@ export default function CalendarScreen() {
                     {ev.all_day && <Typography variant="small" color="muted">Todo el día</Typography>}
                     {ev.description && <Typography variant="small" color="muted" style={{ marginTop: 2 }}>{ev.description}</Typography>}
                   </View>
-                  <TouchableOpacity onPress={() => toggleEventComplete(ev.id)} activeOpacity={0.7}
-                    style={[styles.completeBtn, ev.completed && { backgroundColor: Theme.colors.primary + '33', borderColor: Theme.colors.primary }]}>
-                    <Ionicons name={ev.completed ? 'checkmark' : 'ellipse-outline'} size={16} color={ev.completed ? Theme.colors.primary : Theme.colors.text_muted} />
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    {!ev.completed && (
+                      <TouchableOpacity 
+                        onPress={() => {
+                          const start = ev.date.replace(/-/g, '') + 'T' + (ev.time_start?.replace(':', '') || '000000') + 'Z';
+                          const end = ev.date.replace(/-/g, '') + 'T' + (ev.time_start ? (parseInt(ev.time_start.split(':')[0]) + 1).toString().padStart(2,'0') + ev.time_start.split(':')[1] : '235959') + '00Z';
+                          const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(ev.title)}&dates=${start}/${end}&details=${encodeURIComponent(ev.description || '')}&sf=true&output=xml`;
+                          if (Platform.OS === 'web') window.open(url, '_blank');
+                        }}
+                        activeOpacity={0.7}
+                        style={[styles.smallBtn, { borderColor: Theme.colors.secondary + '44' }]}
+                      >
+                        <Ionicons name="logo-google" size={14} color={Theme.colors.secondary} />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={() => toggleEventComplete(ev.id)} activeOpacity={0.7}
+                      style={[styles.completeBtn, ev.completed && { backgroundColor: Theme.colors.primary + '33', borderColor: Theme.colors.primary }]}>
+                      <Ionicons name={ev.completed ? 'checkmark' : 'ellipse-outline'} size={16} color={ev.completed ? Theme.colors.primary : Theme.colors.text_muted} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </GlowCard>
             ))
@@ -308,6 +324,7 @@ const styles = StyleSheet.create({
   evRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   evIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   completeBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: Theme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  smallBtn: { width: 28, height: 28, borderRadius: 8, borderWidth: 1, borderColor: Theme.colors.border, alignItems: 'center', justifyContent: 'center' },
   fab: {
     position: 'absolute', bottom: 88, right: 20,
     width: 56, height: 56, borderRadius: 28, backgroundColor: Theme.colors.primary,
